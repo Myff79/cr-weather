@@ -230,6 +230,18 @@
   .leg-tide b { color: color-mix(in srgb, var(--pacific) 80%, var(--ink)); font-weight: 500; }
   .leg-note { font-size: 11.5px; color: var(--ink-faint); font-style: italic; margin-top: 5px; }
 
+  /* wedding card */
+  .wed-card { border: 1px solid color-mix(in srgb, var(--wedding) 40%, var(--line)); border-left: 3px solid var(--wedding); border-radius: 8px; background: color-mix(in srgb, var(--wedding) 7%, var(--panel)); padding: 14px 15px; margin-top: 6px; }
+  .wed-card .wc-h { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--wedding); }
+  .wed-card .wc-title { font-size: 17px; font-weight: 600; margin-top: 4px; letter-spacing: 0.01em; }
+  .wed-card .wc-line { font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); margin-top: 6px; }
+  .wed-card .wc-line b { color: var(--ink); font-weight: 500; }
+  .wed-card .wc-wx { display: flex; align-items: center; gap: 10px; margin-top: 11px; padding-top: 11px; border-top: 1px solid color-mix(in srgb, var(--wedding) 25%, transparent); }
+  .wed-card .wc-wx .ico { color: var(--wedding); flex: 0 0 auto; }
+  .wed-card .wc-wx .t { font-size: 12.5px; color: var(--ink); line-height: 1.4; }
+  .wed-card .wc-wx .t span { color: var(--ink-dim); }
+  .wed-card .wc-reh { font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); margin-top: 11px; }
+
   /* where-to ranking */
   .rank { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-left: 3px solid var(--pacific); border-radius: 6px; background: var(--panel); padding: 9px 12px; margin-top: 8px; }
   .rank.car { border-left-color: var(--caribbean); }
@@ -304,6 +316,14 @@ const ITINERARY = [
   { place: "Jacó",          via: "Jacó",     from: "2026-06-18", to: "2026-06-21", coast: "pac", note: "wedding 20 Jun · easy day-trip to Rainmaker Park" },
 ];
 const OPEN_FROM = "2026-06-22"; // free to roam after the wedding
+
+const WEDDING_INFO = {
+  date: "2026-06-20", time: "16:00", timeLabel: "4:00 PM",
+  via: "Jacó",
+  venue: "Casa Blanca by JacoVIP, Jacó",
+  dress: "all white",
+  rehearsal: { date: "2026-06-19", timeLabel: "5:30 PM", attire: "cocktail attire" },
+};
 
 const CACHE_KEY = "cr-weather-cache-v1";
 const STALE_MS = 6 * 3600 * 1000; // 6h → flag as stale
@@ -389,6 +409,14 @@ function hhmm(iso) { return iso.slice(11, 16); }            // "2026-06-06T05:19
 function hourOf(iso) { return parseInt(iso.slice(11, 13), 10); }
 
 function tempStr(t) { return Math.round(t); }
+
+// forecast at one specific local hour, e.g. the 16:00 ceremony
+function hourForecast(loc, ymd, hour) {
+  const H = loc.hourly;
+  const k = H.time.indexOf(ymd + "T" + String(hour).padStart(2, "0") + ":00");
+  if (k < 0) return null;
+  return { temp: H.temperature_2m[k], prob: H.precipitation_probability[k] ?? 0, mm: H.precipitation[k] ?? 0, code: H.weather_code[k] };
+}
 
 /* ---------- intraday granularity (from hourly + minutely_15) ---------- */
 // rain intensity for one step: 0 dry · 1 light/drizzle · 2 showers · 3 downpour
@@ -687,8 +715,32 @@ function renderTrip() {
         </div>`).join("");
   }
 
+  // wedding card — ceremony-hour forecast at Jacó
+  const wi = WEDDING_INFO;
+  const wloc = byName[wi.via];
+  const cf = wloc ? hourForecast(wloc, wi.date, parseInt(wi.time.slice(0, 2), 10)) : null;
+  let wcWx;
+  if (cf) {
+    const verdict = cf.prob >= 60 ? "showers likely — worth a cover/plan B"
+      : cf.prob >= 35 ? "a passing shower is possible" : "looking dry for the hour";
+    wcWx = `<div class="wc-wx">${icon(cf.code, 26)}<div class="t">${wmo(cf.code)} · <b>${tempStr(cf.temp)}°</b>, <b>${Math.round(cf.prob)}%</b> rain at ${wi.timeLabel} <span>— ${verdict}</span></div></div>`;
+  } else {
+    wcWx = `<div class="wc-reh">Ceremony-hour forecast appears once 20 Jun enters the hourly window — check back soon.</div>`;
+  }
+  const wedCard = `
+    <div class="wed-card">
+      <div class="wc-h">♦ The Wedding</div>
+      <div class="wc-title">Saturday 20 June · ${wi.timeLabel}</div>
+      <div class="wc-line"><b>Ceremony &amp; reception</b> · ${wi.venue}</div>
+      <div class="wc-line">Dress code · <b>${wi.dress}</b></div>
+      ${wcWx}
+      <div class="wc-reh">Rehearsal · Fri 19 Jun ${wi.rehearsal.timeLabel} · ${wi.rehearsal.attire}</div>
+    </div>`;
+
   host.innerHTML = `
     <div class="act-intro">Your route, <b>10–21 Jun</b>, with the live forecast for each stop. After the wedding you're open — the board below ranks where's driest to head next.</div>
+    <div class="act-sec">The big day</div>
+    ${wedCard}
     <div class="act-sec">Itinerary</div>
     ${legs}
     <div class="act-sec">After the wedding · where to?</div>
@@ -947,7 +999,7 @@ function daysHTML(loc, todayStr, coast) {
           <span class="d-date">${weekday(ymd)} <b>${dayMon(ymd)}${isWed ? `<span class="wed-badge">♦</span>` : ""}</b></span>
           <span class="d-figs"><b class="d-temp">${tempStr(D.temperature_2m_max[k])}°<span class="lo"> ${tempStr(D.temperature_2m_min[k])}°</span></b> <span class="d-mm">${mm.toFixed(mm<10?1:0)}mm</span></span>
         </div>
-        <div class="d-arc">${icon(code, 16)}<span class="arc-txt">${arc}${isWed ? ` · wedding` : ""}</span>${tag ? `<span class="rainflag sm ${tag.c}">${tag.t}</span>` : ""}</div>
+        <div class="d-arc">${icon(code, 16)}<span class="arc-txt">${arc}${isWed ? ` · wedding ${WEDDING_INFO.time}` : ""}</span>${tag ? `<span class="rainflag sm ${tag.c}">${tag.t}</span>` : ""}</div>
         ${ribbon(loc, ymd, isToday ? nowHr : -1)}
         ${coast !== "val" ? tideRow(loc, ymd) : ""}
       </div>`;
