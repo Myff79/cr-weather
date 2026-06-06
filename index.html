@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0e1014" />
+<title>Costa Rica · Weather Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:        #0e1014;
+    --panel:     #15181f;
+    --panel-2:   #1b1f28;
+    --line:      #262b36;
+    --ink:       #e7e2d4;   /* parchment */
+    --ink-dim:   #9aa0ab;
+    --ink-faint: #5d646f;
+    --pacific:   #d9a14e;   /* sand / amber */
+    --caribbean: #4fb0a5;   /* teal */
+    --valley:    #9a8bd0;   /* muted violet */
+    --rain:      #d6493f;    /* alert red */
+    --wedding:   #e8c25a;   /* gold */
+    --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 18px 16px 64px; }
+
+  /* numbers */
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+  /* header */
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .title-block h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; margin: 0; }
+  .title-block .sub { font-family: var(--mono); font-size: 11.5px; color: var(--ink-dim); margin-top: 4px; letter-spacing: 0.02em; }
+  .meta { text-align: right; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); line-height: 1.5; white-space: nowrap; }
+  .meta .stamp { color: var(--ink-dim); }
+  .meta .stale { color: var(--rain); }
+
+  button.refresh {
+    margin-top: 6px;
+    background: transparent; color: var(--ink-dim);
+    border: 1px solid var(--line); border-radius: 4px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 5px 9px; cursor: pointer; transition: all .15s;
+  }
+  button.refresh:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-faint); }
+  button.refresh:disabled { opacity: .5; cursor: default; }
+  button.refresh.spin { color: var(--pacific); }
+
+  /* coast contrast strip */
+  .contrast { margin: 16px 0 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 12px 14px; }
+  .contrast .lbl { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 9px; }
+  .contrast-row { display: flex; align-items: stretch; gap: 10px; }
+  .coast { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .coast .cname { font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; }
+  .coast.pac .cname { color: var(--pacific); }
+  .coast.car .cname { color: var(--caribbean); }
+  .coast .cstat { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); }
+  .coast .cstat b { color: var(--ink); font-weight: 500; }
+  .coast .bar { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; margin-top: 2px; }
+  .coast .bar > span { display: block; height: 100%; }
+  .coast.pac .bar > span { background: var(--pacific); }
+  .coast.car .bar > span { background: var(--caribbean); }
+  .contrast .verdict { margin-top: 9px; font-size: 12px; color: var(--ink-dim); font-style: italic; }
+
+  /* grid */
+  .grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 14px; }
+  @media (min-width: 560px) { .grid { grid-template-columns: 1fr 1fr; } }
+
+  .card {
+    border: 1px solid var(--line); border-radius: 7px; background: var(--panel);
+    overflow: hidden; cursor: pointer; transition: border-color .15s, background .15s;
+    border-left: 3px solid var(--line);
+  }
+  .card:hover { background: var(--panel-2); }
+  .card.pac  { border-left-color: var(--pacific); }
+  .card.car  { border-left-color: var(--caribbean); }
+  .card.val  { border-left-color: var(--valley); }
+  .card.open { background: var(--panel-2); }
+
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 12px 14px 10px; gap: 10px; }
+  .loc-name { font-size: 15.5px; font-weight: 600; letter-spacing: 0.01em; }
+  .loc-region { font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-faint); margin-top: 2px; }
+  .loc-tag { font-size: 11.5px; color: var(--ink-dim); font-style: italic; margin-top: 5px; }
+
+  .now { text-align: right; }
+  .now .temp { font-family: var(--mono); font-size: 30px; font-weight: 500; line-height: 1; letter-spacing: -0.03em; }
+  .now .temp sup { font-size: 13px; color: var(--ink-faint); top: -0.9em; }
+  .now .hilo { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); margin-top: 5px; }
+  .now .hilo .hi { color: var(--ink); }
+
+  .card-foot { display: flex; align-items: center; gap: 9px; padding: 0 14px 13px; }
+  .ico { flex: 0 0 auto; color: var(--ink-dim); }
+  .card.pac .ico { color: var(--pacific); }
+  .card.car .ico { color: var(--caribbean); }
+  .card.val .ico { color: var(--valley); }
+  .cond { font-size: 12.5px; color: var(--ink-dim); }
+  .cond .summary { color: var(--ink); }
+  .rainflag { margin-left: auto; font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; color: var(--rain); border: 1px solid color-mix(in srgb, var(--rain) 40%, transparent); border-radius: 3px; padding: 2px 5px; white-space: nowrap; }
+
+  /* detail */
+  .detail { border-top: 1px solid var(--line); padding: 4px 0 6px; display: none; }
+  .card.open .detail { display: block; }
+
+  .sunline { display: flex; gap: 16px; padding: 10px 14px 6px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+  .sunline b { color: var(--ink); font-weight: 500; }
+
+  .chart-wrap { padding: 6px 14px 12px; }
+  .chart-wrap .clbl { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; display:flex; justify-content:space-between; }
+  .chart-wrap .clbl .legend { color: var(--rain); }
+  svg.precip { display: block; width: 100%; height: 90px; }
+
+  /* ribbon legend */
+  .ribbon-legend { display: flex; flex-wrap: wrap; gap: 10px; padding: 2px 14px 10px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.03em; color: var(--ink-dim); }
+  .ribbon-legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .ribbon-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  .ribbon-legend .lg-night { color: var(--ink-faint); }
+
+  /* day blocks (stacked, granular) */
+  .days { padding: 2px 8px 8px; }
+  .day-block { padding: 8px 8px 9px; border-radius: 6px; }
+  .day-block + .day-block { border-top: 1px solid var(--line); }
+  .day-block.today { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+  .day-block.wedding { background: color-mix(in srgb, var(--wedding) 12%, transparent); }
+  .day-block.wedding .d-date b { color: var(--wedding); }
+
+  .day-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .d-date { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+  .d-date b { color: var(--ink); font-weight: 600; }
+  .day-block.today .d-date b::after { content: " · now"; color: var(--ink-faint); font-weight: 400; }
+  .d-figs { font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+  .d-temp { font-weight: 500; }
+  .d-temp .lo { color: var(--ink-faint); font-weight: 400; }
+  .d-mm { color: var(--ink-dim); margin-left: 6px; }
+
+  .d-arc { display: flex; align-items: center; gap: 6px; margin: 5px 0 6px; font-size: 12px; color: var(--ink-dim); }
+  .d-arc .ico { color: var(--ink-faint); flex: 0 0 auto; }
+  .d-arc .arc-txt { flex: 1 1 auto; }
+
+  /* intraday timeline */
+  .ribbon { display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; height: 8px; border-radius: 2px; overflow: hidden; }
+  .ribbon .rb { display: block; height: 100%; }
+  .ribbon .rb.now { outline: 1.5px solid var(--ink); outline-offset: -1.5px; z-index: 1; }
+
+  /* intensity tags */
+  .rainflag.sm { margin-left: 0; font-size: 9px; padding: 1px 4px; }
+  .rainflag.t0 { color: #cdb86a; border-color: color-mix(in srgb, #cdb86a 40%, transparent); }
+  .rainflag.t1 { color: #7fbcf0; border-color: color-mix(in srgb, #7fbcf0 40%, transparent); }
+  .rainflag.t2 { color: #5a93dd; border-color: color-mix(in srgb, #5a93dd 50%, transparent); }
+  .rainflag.t3 { color: var(--rain); border-color: color-mix(in srgb, var(--rain) 45%, transparent); }
+  .wed-badge { display:inline-block; font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--wedding); border: 1px solid color-mix(in srgb, var(--wedding) 45%, transparent); border-radius: 3px; padding: 1px 4px; margin-left: 6px; }
+
+  .wed-pending { margin: 4px 14px 12px; font-family: var(--mono); font-size: 11px; color: var(--wedding); border: 1px dashed color-mix(in srgb, var(--wedding) 35%, transparent); border-radius: 5px; padding: 8px 10px; line-height: 1.5; }
+
+  /* states */
+  .banner { margin: 12px 0; border-radius: 6px; padding: 10px 13px; font-family: var(--mono); font-size: 12px; line-height: 1.5; }
+  .banner.err { background: color-mix(in srgb, var(--rain) 12%, transparent); border: 1px solid color-mix(in srgb, var(--rain) 35%, transparent); color: #f0b3ad; }
+  .banner.info { background: var(--panel); border: 1px solid var(--line); color: var(--ink-dim); }
+  .loading { color: var(--ink-faint); font-family: var(--mono); font-size: 12px; padding: 30px 0; text-align: center; }
+
+  footer { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 10px; color: var(--ink-faint); line-height: 1.6; }
+  footer a { color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-block">
+      <h1>Costa Rica · Weather Log</h1>
+      <div class="sub">FIELD FORECAST · 08 JUN – 08 JUL 2026</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;">
+      <div class="meta" id="meta"></div>
+      <button class="refresh" id="refreshBtn">↻ Refresh</button>
+    </div>
+  </header>
+
+  <div id="banner"></div>
+  <div id="contrast"></div>
+  <div id="grid" class="grid"><div class="loading">Reading the sky…</div></div>
+
+  <footer>
+    Source: Open-Meteo best-match · hourly + 15-min steps · each location in its own local time<br/>
+    Model forecast (refreshed ~4×/day), not live radar — intraday colours show the sun/rain mix. No ads · no tracking · no accounts.
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- config ---------- */
+const LOCATIONS = [
+  { name: "Mal País",     lat: 9.6175,  lon: -85.1406, region: "Nicoya · Pacific",      coast: "pac", tag: "the surf outpost" },
+  { name: "Jacó",         lat: 9.6147,  lon: -84.6265, region: "Central Pacific",        coast: "pac", tag: "the loud beach town" },
+  { name: "Puerto Viejo", lat: 9.6552,  lon: -82.7548, region: "Talamanca · Caribbean",  coast: "car", tag: "the Caribbean side" },
+  { name: "San José",     lat: 9.9281,  lon: -84.0907, region: "Central Valley",         coast: "val", tag: "the valley hub" },
+  { name: "La Fortuna",   lat: 10.4706, lon: -84.6453, region: "Arenal · Northern",      coast: "val", tag: "the volcano basecamp" },
+  { name: "Bocas del Toro",lat: 9.3405, lon: -82.2389, region: "Panama · Caribbean",     coast: "car", tag: "the island border-hop" },
+];
+
+const WEDDING = "2026-06-22";
+const CACHE_KEY = "cr-weather-cache-v1";
+const STALE_MS = 6 * 3600 * 1000; // 6h → flag as stale
+
+const API = "https://api.open-meteo.com/v1/forecast"
+  + "?latitude="  + LOCATIONS.map(l => l.lat).join(",")
+  + "&longitude=" + LOCATIONS.map(l => l.lon).join(",")
+  + "&current=temperature_2m,weather_code,relative_humidity_2m,wind_speed_10m,precipitation"
+  + "&hourly=temperature_2m,precipitation,precipitation_probability,weather_code"
+  + "&minutely_15=precipitation,weather_code"
+  + "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,sunrise,sunset,wind_speed_10m_max"
+  + "&timezone=auto&forecast_days=16";
+
+/* ---------- WMO weather codes ---------- */
+function wmo(code) {
+  const m = {
+    0:"Clear", 1:"Mainly clear", 2:"Partly cloudy", 3:"Overcast",
+    45:"Fog", 48:"Rime fog",
+    51:"Light drizzle", 53:"Drizzle", 55:"Heavy drizzle",
+    56:"Freezing drizzle", 57:"Freezing drizzle",
+    61:"Light rain", 63:"Rain", 65:"Heavy rain",
+    66:"Freezing rain", 67:"Freezing rain",
+    71:"Light snow", 73:"Snow", 75:"Heavy snow", 77:"Snow grains",
+    80:"Light showers", 81:"Showers", 82:"Violent showers",
+    85:"Snow showers", 86:"Snow showers",
+    95:"Thunderstorm", 96:"Storm + hail", 99:"Storm + hail",
+  };
+  return m[code] || "—";
+}
+function wmoCat(code) {
+  if (code === 0) return "clear";
+  if (code === 1 || code === 2) return "few";
+  if (code === 3) return "cloud";
+  if (code === 45 || code === 48) return "fog";
+  if (code >= 51 && code <= 57) return "drizzle";
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return "rain";
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+  if (code >= 95) return "storm";
+  return "cloud";
+}
+
+/* tiny line-art SVG icons (field-journal style, currentColor) */
+function icon(code, size) {
+  const s = size || 22;
+  const cat = wmoCat(code);
+  const o = `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">`;
+  const sun = `<circle cx="12" cy="12" r="4.4"/><path d="M12 3.2v2M12 18.8v2M3.2 12h2M18.8 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/>`;
+  const sunSmall = `<circle cx="8.5" cy="8" r="3"/><path d="M8.5 2.8v1.4M3.6 8H2.2M8.5 14.8v-1.4M14.8 8h1.4M4.7 4.2l1 1M12.3 4.2l-1 1"/>`;
+  const cloud = `<path d="M7 18h9.5a3.4 3.4 0 0 0 .3-6.78A4.6 4.6 0 0 0 8 10.2 3.5 3.5 0 0 0 7 18Z"/>`;
+  const drops = (n) => {
+    const xs = n === 3 ? [8,12,16] : (n === 2 ? [9.5,14.5] : [12]);
+    return xs.map(x => `<path d="M${x} 19.5l-1 2"/>`).join("");
+  };
+  const cloudLow = `<path d="M7 15h9.5a3.4 3.4 0 0 0 .3-6.78A4.6 4.6 0 0 0 8 7.2 3.5 3.5 0 0 0 7 15Z"/>`;
+  let body = "";
+  switch (cat) {
+    case "clear":  body = sun; break;
+    case "few":    body = sunSmall + `<path d="M9 18h8a3 3 0 0 0 .2-6 4 4 0 0 0-7.7-1.2A3 3 0 0 0 9 18Z"/>`; break;
+    case "cloud":  body = cloud; break;
+    case "fog":    body = cloudLow + `<path d="M5 18.5h12M7 21h9"/>`; break;
+    case "drizzle":body = cloudLow + `<path d="M9.5 17.5l-.8 1.6M14.5 17.5l-.8 1.6"/>`; break;
+    case "rain":   body = cloudLow + drops(3); break;
+    case "snow":   body = cloudLow + `<path d="M9 18.5h.01M12 20h.01M15 18.5h.01"/>`; break;
+    case "storm":  body = cloudLow + `<path d="M12 16l-2 3.2h3l-2 3"/>`; break;
+    default:       body = cloud;
+  }
+  return o + body + `</svg>`;
+}
+
+/* ---------- timezone-safe helpers (strings are already CR-local) ---------- */
+const WD = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MO = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function ymdParts(ymd) { const [y,m,d] = ymd.split("-").map(Number); return {y,m,d}; }
+function weekday(ymd) { const {y,m,d} = ymdParts(ymd); return WD[new Date(Date.UTC(y, m-1, d)).getUTCDay()]; }
+function dayMon(ymd) { const {m,d} = ymdParts(ymd); return d + " " + MO[m-1]; }
+function hhmm(iso) { return iso.slice(11, 16); }            // "2026-06-06T05:19" → "05:19"
+function hourOf(iso) { return parseInt(iso.slice(11, 13), 10); }
+
+function tempStr(t) { return Math.round(t); }
+
+/* ---------- intraday granularity (from hourly + minutely_15) ---------- */
+// rain intensity for one step: 0 dry · 1 light/drizzle · 2 showers · 3 downpour
+function precipLvl(mm, code) {
+  if (wmoCat(code) === "storm") return 3;
+  if (mm >= 4 || code === 65 || code === 82) return 3;
+  if (mm >= 1 || code === 63 || code === 80 || code === 81 || code === 55) return 2;
+  if (mm >= 0.1 || wmoCat(code) === "drizzle" || wmoCat(code) === "rain") return 1;
+  return 0;
+}
+function hourColor(mm, code) {
+  const lvl = precipLvl(mm, code);
+  if (lvl === 3) return "var(--rain)";   // downpour — red
+  if (lvl === 2) return "#1f5fa8";       // showers — deep blue
+  if (lvl === 1) return "#6fb0e6";       // drizzle — light blue
+  const cat = wmoCat(code);
+  if (cat === "clear" || cat === "few") return "#e8c25a";  // sun — warm gold
+  return "#39414e";                      // cloud — slate
+}
+function hoursForDay(loc, ymd) {
+  const H = loc.hourly, out = [];
+  for (let k = 0; k < H.time.length; k++) {
+    if (H.time[k].slice(0, 10) !== ymd) continue;
+    const mm = H.precipitation[k] ?? 0, code = H.weather_code[k];
+    out.push({ hr: hourOf(H.time[k]), mm, code, lvl: precipLvl(mm, code) });
+  }
+  return out;
+}
+function spanWord(hrs) {
+  if (!hrs.length) return null;
+  const cnt = [0, 0, 0, 0];
+  hrs.forEach(h => { cnt[h.lvl]++; });
+  if (cnt[3]) return "storms";          // always surface thunder
+  let dom = 0;                          // dominant level; ties favour the wetter one
+  for (let l = 1; l < 4; l++) if (cnt[l] >= cnt[dom]) dom = l;
+  if (dom === 2) return "showers";
+  if (dom === 1) return "drizzle";
+  const clear = hrs.filter(h => ["clear", "few"].includes(wmoCat(h.code))).length;
+  return clear >= hrs.length * 0.5 ? "sun" : "cloud";
+}
+function dayArc(loc, ymd) {
+  const hrs = hoursForDay(loc, ymd);
+  return {
+    am:  spanWord(hrs.filter(h => h.hr >= 6  && h.hr <= 11)),
+    pm:  spanWord(hrs.filter(h => h.hr >= 12 && h.hr <= 17)),
+    eve: spanWord(hrs.filter(h => h.hr >= 18 && h.hr <= 22)),
+  };
+}
+function arcText(a) {
+  const p = [];
+  if (a.am)  p.push(a.am + " AM");
+  if (a.pm)  p.push(a.pm + " PM");
+  if (a.eve) p.push(a.eve + " eve");
+  return p.join(" · ");
+}
+// peak-intensity tag for daytime hours
+function dayTag(loc, ymd) {
+  const hrs = hoursForDay(loc, ymd).filter(h => h.hr >= 6 && h.hr <= 19);
+  if (!hrs.length) return null;
+  const maxLvl = Math.max(...hrs.map(h => h.lvl));
+  const wetHrs = hrs.filter(h => h.lvl >= 1).length;
+  if (maxLvl >= 3) return { t: "DOWNPOURS", c: "t3" };
+  if (maxLvl >= 2) return { t: "SHOWERS",   c: "t2" };
+  if (maxLvl >= 1) return { t: wetHrs > 8 ? "DRIZZLY" : "LIGHT RAIN", c: "t1" };
+  return { t: "DRY", c: "t0" };
+}
+// 24-segment intraday timeline
+function ribbon(loc, ymd, nowHr) {
+  const byHr = {};
+  hoursForDay(loc, ymd).forEach(h => { byHr[h.hr] = h; });
+  let cells = "";
+  for (let hr = 0; hr < 24; hr++) {
+    const h = byHr[hr];
+    const color = h ? hourColor(h.mm, h.code) : "#1c2027";
+    const night = hr < 6 || hr > 18;
+    const title = h ? `${String(hr).padStart(2,"0")}:00 · ${wmo(h.code)} · ${h.mm.toFixed(1)}mm` : `${String(hr).padStart(2,"0")}:00`;
+    cells += `<span class="rb${hr === nowHr ? " now" : ""}" style="background:${color};opacity:${night ? 0.45 : 1}" title="${title}"></span>`;
+  }
+  return `<div class="ribbon">${cells}</div>`;
+}
+// near-real-time: next 3 hours at 15-minute resolution
+function nowStrip(loc) {
+  const M = loc.minutely_15;
+  if (!M || !M.time) return "";
+  const now = loc.current ? loc.current.time : M.time[0];
+  let s = M.time.findIndex(t => t >= now.slice(0, 16));
+  if (s < 0) s = M.time.findIndex(t => t >= now.slice(0, 13));
+  if (s < 0) s = 0;
+  const N = 12, steps = [];
+  for (let k = s; k < Math.min(s + N, M.time.length); k++) {
+    steps.push({ t: M.time[k], mm: M.precipitation[k] ?? 0, code: M.weather_code[k] });
+  }
+  if (!steps.length) return "";
+  const W = 100, Hh = 100, bw = W / steps.length;
+  const maxMM = Math.max(0.4, ...steps.map(x => x.mm));
+  let bars = "", ticks = "";
+  steps.forEach((st, idx) => {
+    const x = idx * bw;
+    const h = (st.mm / maxMM) * (Hh - 22);
+    bars += `<rect x="${(x+bw*0.15).toFixed(2)}" y="${(Hh-12-h).toFixed(2)}" width="${(bw*0.7).toFixed(2)}" height="${Math.max(h,0).toFixed(2)}" fill="${hourColor(st.mm*4, st.code)}"><title>${hhmm(st.t)} · ${st.mm.toFixed(2)} mm/15min</title></rect>`;
+    if (idx % 4 === 0) ticks += `<text x="${(x+1).toFixed(2)}" y="${Hh-2}" font-size="5" fill="var(--ink-faint)" font-family="ui-monospace, monospace">${idx === 0 ? "now" : hhmm(st.t)}</text>`;
+  });
+  const total = steps.reduce((a, x) => a + x.mm, 0);
+  const head = total < 0.1 ? "no rain expected" : "~" + total.toFixed(1) + "mm over 3h";
+  return `
+    <div class="chart-wrap">
+      <div class="clbl"><span>Right now · next 3h · 15-min</span><span class="legend">${head}</span></div>
+      <svg class="precip" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">
+        <line x1="0" y1="${Hh-12}" x2="${W}" y2="${Hh-12}" stroke="var(--line)" stroke-width="0.5"/>
+        ${bars}${ticks}
+      </svg>
+    </div>`;
+}
+
+/* ---------- state ---------- */
+let DATA = null;       // array of 5 location forecasts
+let STAMP = null;      // ms timestamp of data
+let OPEN = new Set();  // open card indices
+
+/* ---------- fetch + cache ---------- */
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+function saveCache(data, ts) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts, data })); } catch (e) {}
+}
+
+async function refresh() {
+  const btn = document.getElementById("refreshBtn");
+  btn.disabled = true; btn.classList.add("spin"); btn.textContent = "↻ …";
+  try {
+    const res = await fetch(API, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const json = await res.json();
+    const arr = Array.isArray(json) ? json : [json];
+    DATA = arr; STAMP = Date.now();
+    saveCache(arr, STAMP);
+    setBanner(null);
+    render();
+  } catch (err) {
+    if (DATA) {
+      setBanner("err", "Couldn't reach the forecast (" + err.message + "). Showing last saved data below.");
+    } else {
+      const c = loadCache();
+      if (c) { DATA = c.data; STAMP = c.ts; setBanner("err", "Offline — showing cached forecast."); render(); }
+      else { setBanner("err", "No connection and no cached forecast yet. Reconnect and refresh."); document.getElementById("grid").innerHTML = ""; }
+    }
+  } finally {
+    btn.disabled = false; btn.classList.remove("spin"); btn.textContent = "↻ Refresh";
+  }
+}
+
+function setBanner(kind, msg) {
+  const el = document.getElementById("banner");
+  if (!kind) { el.innerHTML = ""; return; }
+  el.innerHTML = `<div class="banner ${kind}">${msg}</div>`;
+}
+
+/* ---------- rendering ---------- */
+function todayYMD(loc) { return (loc.current && loc.current.time ? loc.current.time : loc.daily.time[0]).slice(0,10); }
+
+function render() {
+  if (!DATA) return;
+  renderMeta();
+  renderContrast();
+  renderGrid();
+}
+
+function renderMeta() {
+  const el = document.getElementById("meta");
+  const age = Date.now() - STAMP;
+  const stale = age > STALE_MS;
+  const d = new Date(STAMP);
+  const t = String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
+  el.innerHTML = `<div class="${stale ? "stale" : "stamp"}">updated ${t} local</div>`
+    + `<div>${stale ? "↑ over 6h old" : "live"}</div>`;
+}
+
+function renderContrast() {
+  // groups by coast tag, derived from LOCATIONS
+  const idxPac = LOCATIONS.map((l,i)=>l.coast==="pac"?i:-1).filter(i=>i>=0);
+  const idxCar = LOCATIONS.map((l,i)=>l.coast==="car"?i:-1).filter(i=>i>=0);
+  const todayVal = (i) => {
+    const loc = DATA[i]; const ti = 0;
+    return {
+      hi: loc.daily.temperature_2m_max[ti] ?? 0,
+      prob: loc.daily.precipitation_probability_max[ti] ?? 0,
+      mm: loc.daily.precipitation_sum[ti] ?? 0,
+      code: loc.daily.weather_code[ti],
+    };
+  };
+  const avg = (idxs, key) => idxs.reduce((s,i)=>s+todayVal(i)[key],0)/idxs.length;
+  const pac = { hi: avg(idxPac,"hi"), prob: avg(idxPac,"prob"), mm: avg(idxPac,"mm") };
+  const car = { hi: avg(idxCar,"hi"), prob: avg(idxCar,"prob"), mm: avg(idxCar,"mm") };
+  const maxProb = Math.max(pac.prob, car.prob, 1);
+  const carNames = idxCar.map(i=>LOCATIONS[i].name).join(" + ");
+  const pacNames = idxPac.map(i=>LOCATIONS[i].name).join(" + ");
+
+  let verdict;
+  const diff = pac.prob - car.prob;
+  if (Math.abs(diff) < 12) verdict = "Both coasts look similar today.";
+  else if (diff > 0) verdict = "Caribbean side is the drier bet today — head east.";
+  else verdict = "Pacific side is the drier bet today — head west.";
+
+  document.getElementById("contrast").innerHTML = `
+    <div class="contrast">
+      <div class="lbl">Coast contrast · today</div>
+      <div class="contrast-row">
+        <div class="coast pac">
+          <div class="cname">PACIFIC · ${pacNames}</div>
+          <div class="cstat"><b class="num">${tempStr(pac.hi)}°</b> high · rain <b class="num">${Math.round(pac.prob)}%</b></div>
+          <div class="bar"><span style="width:${Math.round(pac.prob/maxProb*100)}%"></span></div>
+        </div>
+        <div class="coast car">
+          <div class="cname">CARIBBEAN · ${carNames}</div>
+          <div class="cstat"><b class="num">${tempStr(car.hi)}°</b> high · rain <b class="num">${Math.round(car.prob)}%</b></div>
+          <div class="bar"><span style="width:${Math.round(car.prob/maxProb*100)}%"></span></div>
+        </div>
+      </div>
+      <div class="verdict">${verdict}</div>
+    </div>`;
+}
+
+function renderGrid() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  DATA.forEach((loc, i) => {
+    const cfg = LOCATIONS[i];
+    const cur = loc.current;
+    const today = todayYMD(loc);
+    const hi = loc.daily.temperature_2m_max[0];
+    const lo = loc.daily.temperature_2m_min[0];
+    const code = cur.weather_code;
+    const arc = arcText(dayArc(loc, today));
+    const tag = dayTag(loc, today);
+
+    const card = document.createElement("div");
+    card.className = "card " + cfg.coast + (OPEN.has(i) ? " open" : "");
+    card.innerHTML = `
+      <div class="card-head">
+        <div>
+          <div class="loc-name">${cfg.name}</div>
+          <div class="loc-region">${cfg.region}</div>
+          <div class="loc-tag">${cfg.tag}</div>
+        </div>
+        <div class="now">
+          <div class="temp num">${tempStr(cur.temperature_2m)}<sup>°C</sup></div>
+          <div class="hilo num"><span class="hi">↑${tempStr(hi)}°</span>  ↓${tempStr(lo)}°</div>
+        </div>
+      </div>
+      <div class="card-foot">
+        ${icon(code, 22)}
+        <div class="cond"><span class="summary">Now ${wmo(code).toLowerCase()}.</span> ${arc}</div>
+        ${tag ? `<div class="rainflag ${tag.c} num">${tag.t}</div>` : ""}
+      </div>
+      <div class="detail">${OPEN.has(i) ? detailHTML(loc, i) : ""}</div>`;
+
+    card.querySelector(".card-head").addEventListener("click", () => toggle(i));
+    card.querySelector(".card-foot").addEventListener("click", () => toggle(i));
+    grid.appendChild(card);
+  });
+}
+
+function toggle(i) {
+  if (OPEN.has(i)) OPEN.delete(i); else OPEN.add(i);
+  renderGrid();
+}
+
+function detailHTML(loc, i) {
+  const t = todayYMD(loc);
+  const sunrise = loc.daily.sunrise[0], sunset = loc.daily.sunset[0];
+
+  // wedding-in-range?
+  const wedIdx = loc.daily.time.indexOf(WEDDING);
+  let wedPending = "";
+  if (wedIdx === -1) {
+    const {y,m,d} = ymdParts(t);
+    const today = new Date(Date.UTC(y,m-1,d));
+    const {y:wy,m:wm,d:wd} = ymdParts(WEDDING);
+    const wedDate = new Date(Date.UTC(wy,wm-1,wd));
+    const days = Math.round((wedDate - today) / 86400000);
+    const into = days - 15;
+    const enters = into <= 0 ? "very soon" : into === 1 ? "tomorrow" : "in " + into + " days";
+    wedPending = `<div class="wed-pending">♦ Wedding · 22 Jun — ${days} day${days===1?"":"s"} out, just beyond the 16-day window. It enters the forecast ${enters}.</div>`;
+  }
+
+  return `
+    <div class="sunline">
+      <span>☼ rise <b>${hhmm(sunrise)}</b></span>
+      <span>☾ set <b>${hhmm(sunset)}</b></span>
+      <span>16-day outlook</span>
+    </div>
+    ${nowStrip(loc)}
+    ${wedPending}
+    <div class="ribbon-legend">
+      <span><i style="background:#e8c25a"></i>sun</span>
+      <span><i style="background:#39414e"></i>cloud</span>
+      <span><i style="background:#6fb0e6"></i>drizzle</span>
+      <span><i style="background:#1f5fa8"></i>showers</span>
+      <span><i style="background:var(--rain)"></i>downpour</span>
+      <span class="lg-night">faded = night</span>
+    </div>
+    <div class="days">${daysHTML(loc, t)}</div>`;
+}
+
+function daysHTML(loc, todayStr) {
+  const D = loc.daily;
+  const nowHr = loc.current ? hourOf(loc.current.time) : -1;
+  let out = "";
+  for (let k = 0; k < D.time.length; k++) {
+    const ymd = D.time[k];
+    const isToday = ymd === todayStr;
+    const isWed = ymd === WEDDING;
+    const mm = D.precipitation_sum[k] ?? 0;
+    const code = D.weather_code[k];
+    const arc = arcText(dayArc(loc, ymd));
+    const tag = dayTag(loc, ymd);
+    const cls = "day-block" + (isToday ? " today" : "") + (isWed ? " wedding" : "");
+    out += `
+      <div class="${cls}">
+        <div class="day-top">
+          <span class="d-date">${weekday(ymd)} <b>${dayMon(ymd)}${isWed ? `<span class="wed-badge">♦</span>` : ""}</b></span>
+          <span class="d-figs"><b class="d-temp">${tempStr(D.temperature_2m_max[k])}°<span class="lo"> ${tempStr(D.temperature_2m_min[k])}°</span></b> <span class="d-mm">${mm.toFixed(mm<10?1:0)}mm</span></span>
+        </div>
+        <div class="d-arc">${icon(code, 16)}<span class="arc-txt">${arc}${isWed ? ` · wedding` : ""}</span>${tag ? `<span class="rainflag sm ${tag.c}">${tag.t}</span>` : ""}</div>
+        ${ribbon(loc, ymd, isToday ? nowHr : -1)}
+      </div>`;
+  }
+  return out;
+}
+
+/* ---------- boot ---------- */
+(function init() {
+  const c = loadCache();
+  if (c && c.data) {
+    DATA = c.data; STAMP = c.ts;
+    render();
+    const age = Date.now() - STAMP;
+    if (age > STALE_MS) setBanner("info", "Showing cached forecast while refreshing…");
+  }
+  document.getElementById("refreshBtn").addEventListener("click", refresh);
+  refresh();
+})();
+</script>
+</body>
+</html>
