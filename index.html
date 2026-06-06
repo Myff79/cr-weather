@@ -216,6 +216,31 @@
   .act-tides { margin-top: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); line-height: 1.6; }
   .act-tides .lbl { color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; font-size: 9.5px; }
   .act-tides b { color: var(--pacific); font-weight: 500; }
+
+  /* trip itinerary */
+  .leg { border: 1px solid var(--line); border-left: 3px solid var(--pacific); border-radius: 7px; background: var(--panel); padding: 11px 14px; margin-top: 9px; }
+  .leg.car { border-left-color: var(--caribbean); }
+  .leg.val { border-left-color: var(--valley); }
+  .leg-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .leg-name { font-size: 14.5px; font-weight: 600; letter-spacing: 0.01em; }
+  .leg-date { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); white-space: nowrap; }
+  .leg-wx { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); margin-top: 6px; }
+  .leg-wx b { color: var(--ink); font-weight: 500; }
+  .leg-tide { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-top: 4px; }
+  .leg-tide b { color: color-mix(in srgb, var(--pacific) 80%, var(--ink)); font-weight: 500; }
+  .leg-note { font-size: 11.5px; color: var(--ink-faint); font-style: italic; margin-top: 5px; }
+
+  /* where-to ranking */
+  .rank { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-left: 3px solid var(--pacific); border-radius: 6px; background: var(--panel); padding: 9px 12px; margin-top: 8px; }
+  .rank.car { border-left-color: var(--caribbean); }
+  .rank.val { border-left-color: var(--valley); }
+  .rank.best { background: var(--panel-2); }
+  .rk-pos { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--ink-faint); width: 16px; flex: 0 0 auto; text-align: center; }
+  .rank.best .rk-pos { color: var(--wedding); }
+  .rk-name { font-size: 13.5px; font-weight: 600; flex: 1 1 auto; }
+  .rk-region { display: block; font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); font-weight: 400; margin-top: 1px; }
+  .rk-fig { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); text-align: right; white-space: nowrap; }
+  .rk-fig b { color: var(--ink); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -233,13 +258,18 @@
 
   <nav class="tabs" id="tabs">
     <button class="tab active" data-view="forecast">Forecast</button>
-    <button class="tab" data-view="activities">Mal País · week</button>
+    <button class="tab" data-view="trip">Trip</button>
+    <button class="tab" data-view="activities">Mal País</button>
   </nav>
 
   <div id="view-forecast">
     <div id="banner"></div>
     <div id="contrast"></div>
     <div id="grid" class="grid"><div class="loading">Reading the sky…</div></div>
+  </div>
+
+  <div id="view-trip" hidden>
+    <div id="trip"></div>
   </div>
 
   <div id="view-activities" hidden>
@@ -265,7 +295,16 @@ const LOCATIONS = [
   { name: "Bocas del Toro",lat: 9.3405, lon: -82.2389, region: "Panama · Caribbean",     coast: "car", tag: "the island border-hop" },
 ];
 
-const WEDDING = "2026-06-22";
+const WEDDING = "2026-06-20";
+
+// trip itinerary — each leg maps to the nearest weather location (`via`)
+const ITINERARY = [
+  { place: "Mal País",      via: "Mal País", from: "2026-06-10", to: "2026-06-17", coast: "pac", note: "surf · Cabo Blanco · tide pools" },
+  { place: "Villa Caletas", via: "Jacó",     from: "2026-06-17", to: "2026-06-18", coast: "pac", note: "clifftop hotel near Tárcoles — uses Jacó's nearby forecast" },
+  { place: "Jacó",          via: "Jacó",     from: "2026-06-18", to: "2026-06-21", coast: "pac", note: "wedding 20 Jun · easy day-trip to Rainmaker Park" },
+];
+const OPEN_FROM = "2026-06-22"; // free to roam after the wedding
+
 const CACHE_KEY = "cr-weather-cache-v1";
 const STALE_MS = 6 * 3600 * 1000; // 6h → flag as stale
 
@@ -579,14 +618,89 @@ function render() {
   renderGrid();
   const av = document.getElementById("view-activities");
   if (av && !av.hidden) renderActivities();
+  const tv = document.getElementById("view-trip");
+  if (tv && !tv.hidden) renderTrip();
 }
 
 /* ---------- tabs ---------- */
+const VIEWS = ["forecast", "trip", "activities"];
 function switchView(view) {
   document.querySelectorAll("#tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.view === view));
-  document.getElementById("view-forecast").hidden = view !== "forecast";
-  document.getElementById("view-activities").hidden = view !== "activities";
+  VIEWS.forEach(v => { const el = document.getElementById("view-" + v); if (el) el.hidden = v !== view; });
   if (view === "activities") renderActivities();
+  if (view === "trip") renderTrip();
+}
+
+/* ---------- trip view ---------- */
+function rangeSummary(loc, from, to) {
+  const D = loc.daily; let n = 0, hi = 0, mm = 0, prob = 0;
+  for (let k = 0; k < D.time.length; k++) {
+    if (D.time[k] >= from && D.time[k] < to) {
+      n++; hi += D.temperature_2m_max[k] ?? 0; mm += D.precipitation_sum[k] ?? 0;
+      prob = Math.max(prob, D.precipitation_probability_max[k] ?? 0);
+    }
+  }
+  if (!n) return null;
+  return { hi: hi / n, mmTotal: mm, prob, days: n };
+}
+function legDates(from, to) {
+  const a = ymdParts(from), b = ymdParts(to);
+  if (a.m === b.m) return `${a.d}–${b.d} ${MO[a.m-1]}`;
+  return `${a.d} ${MO[a.m-1]} – ${b.d} ${MO[b.m-1]}`;
+}
+function renderTrip() {
+  const host = document.getElementById("trip");
+  if (!DATA) { host.innerHTML = `<div class="loading">Reading the sky…</div>`; return; }
+  const byName = {}; LOCATIONS.forEach((l, i) => { byName[l.name] = DATA[i]; });
+
+  const legs = ITINERARY.map(leg => {
+    const loc = byName[leg.via];
+    const s = loc ? rangeSummary(loc, leg.from, leg.to) : null;
+    const wx = s
+      ? `<b>${tempStr(s.hi)}°</b> high · rain to <b>${Math.round(s.prob)}%</b> · ${s.mmTotal.toFixed(0)}mm total`
+      : `<span style="color:var(--ink-faint)">beyond the 16-day window for now — fills in soon</span>`;
+    const lows = loc && leg.coast !== "val" ? nextTideInRange(loc, leg.from, leg.to) : "";
+    return `
+      <div class="leg ${leg.coast}">
+        <div class="leg-top"><span class="leg-name">${leg.place}</span><span class="leg-date">${legDates(leg.from, leg.to)}</span></div>
+        <div class="leg-wx">${wx}</div>
+        ${lows ? `<div class="leg-tide">low tides ${lows}</div>` : ""}
+        <div class="leg-note">${leg.note}</div>
+      </div>`;
+  }).join("");
+
+  const ranked = LOCATIONS
+    .map((l, i) => ({ name: l.name, coast: l.coast, region: l.region, s: rangeSummary(DATA[i], OPEN_FROM, "2099-01-01") }))
+    .filter(x => x.s)
+    .sort((a, b) => a.s.mmTotal - b.s.mmTotal);
+
+  let planner;
+  if (!ranked.length) {
+    planner = `<div class="act-intro">The open stretch (from <b>22 Jun</b>) isn't inside the 16-day forecast yet. This board fills in and ranks itself automatically as those days come into range — check back from around <b>17 Jun</b>, and hit Refresh.</div>`;
+  } else {
+    planner = `<div class="act-intro">Driest bets for your open dates (from <b>22 Jun</b>), ranked by total rain across the days now in range:</div>`
+      + ranked.map((x, idx) => `
+        <div class="rank ${x.coast}${idx === 0 ? " best" : ""}">
+          <span class="rk-pos">${idx + 1}</span>
+          <span class="rk-name">${x.name}<span class="rk-region">${x.region}</span></span>
+          <span class="rk-fig"><b>${tempStr(x.s.hi)}°</b> · rain ${Math.round(x.s.prob)}% · ${x.s.mmTotal.toFixed(0)}mm/${x.s.days}d</span>
+        </div>`).join("");
+  }
+
+  host.innerHTML = `
+    <div class="act-intro">Your route, <b>10–21 Jun</b>, with the live forecast for each stop. After the wedding you're open — the board below ranks where's driest to head next.</div>
+    <div class="act-sec">Itinerary</div>
+    ${legs}
+    <div class="act-sec">After the wedding · where to?</div>
+    ${planner}`;
+}
+function nextTideInRange(loc, from, to) {
+  const D = loc.daily, out = [];
+  for (let k = 0; k < D.time.length && out.length < 2; k++) {
+    if (D.time[k] < from || D.time[k] >= to) continue;
+    tideExtrema(loc, D.time[k]).forEach(e => { if (e.type === "L" && out.length < 2) out.push(`<b>${e.t}</b> (${weekday(D.time[k])})`); });
+  }
+  return out.join(" · ");
 }
 
 /* ---------- activities view ---------- */
