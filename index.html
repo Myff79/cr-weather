@@ -174,6 +174,48 @@
 
   footer { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 10px; color: var(--ink-faint); line-height: 1.6; }
   footer a { color: var(--ink-faint); }
+
+  /* tabs */
+  nav.tabs { display: flex; gap: 6px; margin-top: 14px; }
+  nav.tabs .tab {
+    flex: 0 0 auto; background: transparent; color: var(--ink-dim);
+    border: 1px solid var(--line); border-radius: 5px;
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 7px 12px; cursor: pointer; transition: all .15s;
+  }
+  nav.tabs .tab:hover { color: var(--ink); border-color: var(--ink-faint); }
+  nav.tabs .tab.active { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+
+  /* tides */
+  .tideline { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 2px 14px 8px; font-family: var(--mono); font-size: 11px; color: var(--ink-dim); }
+  .tideline .th { color: var(--caribbean); }
+  .tideline .tl { color: var(--pacific); }
+  .tideline b { color: var(--ink); font-weight: 500; }
+  .d-tide { font-family: var(--mono); font-size: 9.5px; color: var(--ink-faint); margin-top: 5px; letter-spacing: 0.02em; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .d-tide .lbl { color: var(--ink-faint); }
+  .d-tide .h { color: color-mix(in srgb, var(--caribbean) 75%, var(--ink)); }
+  .d-tide .l { color: color-mix(in srgb, var(--pacific) 80%, var(--ink)); }
+
+  /* activities */
+  .act-intro { margin: 16px 0 6px; font-size: 13px; color: var(--ink-dim); line-height: 1.55; }
+  .act-intro b { color: var(--ink); font-weight: 600; }
+  .act-sec { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin: 22px 0 2px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .act-card { border: 1px solid var(--line); border-left: 3px solid var(--pacific); border-radius: 7px; background: var(--panel); padding: 13px 15px; margin-top: 10px; }
+  .act-card.water { border-left-color: var(--caribbean); }
+  .act-card.wildlife { border-left-color: var(--valley); }
+  .act-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .act-name { font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+  .act-type { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-faint); margin-top: 3px; }
+  .act-rec { text-align: right; flex: 0 0 auto; }
+  .act-rec .day { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--bg); background: var(--wedding); border-radius: 4px; padding: 4px 8px; white-space: nowrap; }
+  .act-rec .day.dim { background: transparent; color: var(--ink-dim); border: 1px solid var(--line); }
+  .act-rec .why { font-family: var(--mono); font-size: 9px; color: var(--ink-faint); margin-top: 4px; }
+  .act-desc { font-size: 12.5px; color: var(--ink-dim); margin-top: 9px; line-height: 1.5; }
+  .act-meta { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); }
+  .act-meta span b { color: var(--ink); font-weight: 500; }
+  .act-tides { margin-top: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--ink-dim); line-height: 1.6; }
+  .act-tides .lbl { color: var(--ink-faint); letter-spacing: 0.06em; text-transform: uppercase; font-size: 9.5px; }
+  .act-tides b { color: var(--pacific); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -189,9 +231,20 @@
     </div>
   </header>
 
-  <div id="banner"></div>
-  <div id="contrast"></div>
-  <div id="grid" class="grid"><div class="loading">Reading the sky…</div></div>
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="forecast">Forecast</button>
+    <button class="tab" data-view="activities">Mal País · week</button>
+  </nav>
+
+  <div id="view-forecast">
+    <div id="banner"></div>
+    <div id="contrast"></div>
+    <div id="grid" class="grid"><div class="loading">Reading the sky…</div></div>
+  </div>
+
+  <div id="view-activities" hidden>
+    <div id="activities"></div>
+  </div>
 
   <footer>
     Source: Open-Meteo best-match · hourly + 15-min steps · each location in its own local time<br/>
@@ -223,6 +276,12 @@ const API = "https://api.open-meteo.com/v1/forecast"
   + "&hourly=temperature_2m,precipitation,precipitation_probability,weather_code"
   + "&minutely_15=precipitation,weather_code"
   + "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,sunrise,sunset,wind_speed_10m_max"
+  + "&timezone=auto&forecast_days=16";
+
+const MARINE = "https://marine-api.open-meteo.com/v1/marine"
+  + "?latitude="  + LOCATIONS.map(l => l.lat).join(",")
+  + "&longitude=" + LOCATIONS.map(l => l.lon).join(",")
+  + "&hourly=sea_level_height_msl"
   + "&timezone=auto&forecast_days=16";
 
 /* ---------- WMO weather codes ---------- */
@@ -405,6 +464,52 @@ function nowStrip(loc) {
     </div>`;
 }
 
+/* ---------- tides (marine API · sea_level_height_msl) ---------- */
+// local high/low tide turning points for a given local day
+function tideExtrema(loc, ymd) {
+  const M = loc.marine;
+  if (!M || !M.hourly || !M.hourly.sea_level_height_msl) return [];
+  const T = M.hourly.time, H = M.hourly.sea_level_height_msl;
+  const ext = [];
+  for (let k = 1; k < T.length - 1; k++) {
+    if (T[k].slice(0, 10) !== ymd) continue;
+    const a = H[k-1], b = H[k], c = H[k+1];
+    if (a == null || b == null || c == null) continue;
+    if (b >= a && b >= c && (b > a || b > c)) ext.push({ type: "H", t: hhmm(T[k]), h: b });
+    else if (b <= a && b <= c && (b < a || b < c)) ext.push({ type: "L", t: hhmm(T[k]), h: b });
+  }
+  return ext;
+}
+function tideTextToday(loc, ymd) {
+  const ex = tideExtrema(loc, ymd);
+  if (!ex.length) return `<span style="color:var(--ink-faint)">tides unavailable</span>`;
+  return ex.map(e => e.type === "H"
+    ? `<span class="th">▲ high <b>${e.t}</b></span>`
+    : `<span class="tl">▼ low <b>${e.t}</b></span>`).join("");
+}
+function nextLowTides(loc, n) {
+  const todayStr = todayYMD(loc), D = loc.daily, res = [];
+  for (let k = 0; k < D.time.length && res.length < n; k++) {
+    if (D.time[k] < todayStr) continue;
+    tideExtrema(loc, D.time[k]).forEach(e => { if (e.type === "L") res.push({ ymd: D.time[k], t: e.t }); });
+  }
+  return res.slice(0, n);
+}
+
+/* ---------- activity day-matching (driest upcoming days) ---------- */
+function dow(ymd) { const {y,m,d} = ymdParts(ymd); return new Date(Date.UTC(y, m-1, d)).getUTCDay(); }
+function fmtDay(ymd) { return weekday(ymd).toUpperCase() + " " + dayMon(ymd); }
+function drynessRanked(loc) {
+  const D = loc.daily, todayStr = todayYMD(loc), arr = [];
+  for (let k = 0; k < D.time.length; k++) {
+    if (D.time[k] < todayStr) continue;
+    const mm = D.precipitation_sum[k] ?? 0;
+    const prob = D.precipitation_probability_max[k] ?? 0;
+    arr.push({ ymd: D.time[k], k, mm, prob, hi: D.temperature_2m_max[k] ?? 0, score: mm * 2 + prob * 0.1 });
+  }
+  return arr;
+}
+
 /* ---------- state ---------- */
 let DATA = null;       // array of 5 location forecasts
 let STAMP = null;      // ms timestamp of data
@@ -426,10 +531,21 @@ async function refresh() {
   const btn = document.getElementById("refreshBtn");
   btn.disabled = true; btn.classList.add("spin"); btn.textContent = "↻ …";
   try {
-    const res = await fetch(API, { cache: "no-store" });
+    const [res, mres] = await Promise.all([
+      fetch(API, { cache: "no-store" }),
+      fetch(MARINE, { cache: "no-store" }).catch(() => null),
+    ]);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const json = await res.json();
     const arr = Array.isArray(json) ? json : [json];
+    // attach tide data (optional — app still works without it)
+    if (mres && mres.ok) {
+      try {
+        const mjson = await mres.json();
+        const marr = Array.isArray(mjson) ? mjson : [mjson];
+        arr.forEach((loc, i) => { loc.marine = marr[i] || null; });
+      } catch (e) { /* tides optional */ }
+    }
     DATA = arr; STAMP = Date.now();
     saveCache(arr, STAMP);
     setBanner(null);
@@ -461,6 +577,96 @@ function render() {
   renderMeta();
   renderContrast();
   renderGrid();
+  const av = document.getElementById("view-activities");
+  if (av && !av.hidden) renderActivities();
+}
+
+/* ---------- tabs ---------- */
+function switchView(view) {
+  document.querySelectorAll("#tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+  document.getElementById("view-forecast").hidden = view !== "forecast";
+  document.getElementById("view-activities").hidden = view !== "activities";
+  if (view === "activities") renderActivities();
+}
+
+/* ---------- activities view ---------- */
+function renderActivities() {
+  const host = document.getElementById("activities");
+  if (!DATA) { host.innerHTML = `<div class="loading">Reading the sky…</div>`; return; }
+  const mpIdx = Math.max(0, LOCATIONS.findIndex(l => l.name === "Mal País"));
+  const mp = DATA[mpIdx];
+  const horizon = drynessRanked(mp).slice(0, 12);
+  const driest = [...horizon].sort((a, b) => a.score - b.score);
+  const bestDry = driest[0];
+  const OPEN_DOW = [3, 4, 5, 6, 0]; // Cabo Blanco: Wed–Sun
+  const caboDay = driest.find(d => OPEN_DOW.includes(dow(d.ymd)));
+  const dry2 = driest.find(d => !caboDay || d.ymd !== caboDay.ymd) || bestDry;
+  const lows = nextLowTides(mp, 4);
+  const morningLow = lows.find(l => { const h = parseInt(l.t.slice(0, 2), 10); return h >= 5 && h <= 12; }) || lows[0];
+
+  const badge = (day, note) => day
+    ? `<div class="act-rec"><span class="day">${fmtDay(day.ymd)}</span><div class="why">${note}</div></div>`
+    : `<div class="act-rec"><span class="day dim">flexible</span></div>`;
+  const lowsList = lows.length
+    ? lows.map(l => `${weekday(l.ymd)} ${dayMon(l.ymd)} <b>${l.t}</b>`).join(" · ")
+    : "tide data unavailable";
+
+  host.innerHTML = `
+    <div class="act-intro">
+      Nature outings around <b>Mal País</b>, matched to the live forecast. The
+      <b>recommended day</b> on each card is the driest upcoming day and re-ranks every refresh;
+      tide-pool timing comes from the marine tide model.
+    </div>
+
+    <div class="act-sec">Recommended this week</div>
+
+    <div class="act-card hike">
+      <div class="act-head">
+        <div><div class="act-name">Cabo Blanco Reserve</div><div class="act-type">Hike · ~35 min drive (Cabuya)</div></div>
+        ${badge(caboDay, caboDay ? `driest open day · ${Math.round(caboDay.prob)}% rain` : "")}
+      </div>
+      <div class="act-desc">Sendero Sueco (4–5 h round trip) out to a wild beach, or the short Danes loop. ~240 bird species, monkeys &amp; coatis. Start early — high midday UV and afternoon showers.</div>
+      <div class="act-meta">
+        <span><b>Open</b> Wed–Sun 08–16</span><span><b>Closed</b> Mon · Tue</span>
+        <span><b>Entry</b> $12 / person</span><span><b>Bring</b> water · sun · cash</span>
+      </div>
+    </div>
+
+    <div class="act-card water">
+      <div class="act-head">
+        <div><div class="act-name">Montezuma Waterfalls</div><div class="act-type">Swim + short walk · ~40 min drive</div></div>
+        ${badge(dry2, dry2 ? `dry &amp; warm · ${Math.round(dry2.hi)}°` : "")}
+      </div>
+      <div class="act-desc">Three cascading falls with swimming pools; a ~20-min walk up the riverbed reaches the big lower fall. Fine even if the ground is damp — a good pick after a wet morning.</div>
+      <div class="act-meta"><span><b>Drive</b> ~40 min via Cóbano</span><span><b>Entry</b> free / small parking</span><span><b>Bring</b> grippy sandals</span></div>
+    </div>
+
+    <div class="act-card water">
+      <div class="act-head">
+        <div><div class="act-name">Mal País Tide Pools</div><div class="act-type">Local · free · needs low tide</div></div>
+        ${morningLow
+          ? `<div class="act-rec"><span class="day">${weekday(morningLow.ymd).toUpperCase()} ${dayMon(morningLow.ymd)}</span><div class="why">low tide ${morningLow.t}</div></div>`
+          : `<div class="act-rec"><span class="day dim">check tide</span></div>`}
+      </div>
+      <div class="act-desc">Volcanic rock pools at the south end of Mal País (Mar Azul) — only walkable around low tide. Calm morning lows are best for a wander before the heat.</div>
+      <div class="act-tides"><span class="lbl">Next low tides</span><br/>${lowsList}</div>
+    </div>
+
+    <div class="act-card wildlife">
+      <div class="act-head">
+        <div><div class="act-name">Curú Wildlife Reserve</div><div class="act-type">Wildlife · easy trails · ~1.5 h</div></div>
+        ${badge(bestDry, bestDry ? `driest day · ${Math.round(bestDry.prob)}% rain` : "")}
+      </div>
+      <div class="act-desc">Costa Rica's first private refuge, toward Paquera. Monkeys, sloths, coatis and plenty of birds on flat, easy paths — a relaxed wildlife day.</div>
+      <div class="act-meta"><span><b>Drive</b> ~1.5 h (Paquera side)</span><span><b>Entry</b> ~$15 / person</span><span><b>Best</b> early morning</span></div>
+    </div>
+
+    <div class="act-sec">How the picks work</div>
+    <div class="act-intro" style="margin-top:8px">
+      Days are ranked by the Mal País forecast (rain total + chance). Cabo Blanco is limited to its
+      <b>Wed–Sun</b> opening days. Everything outdoors leans on dry mornings — plan the big stuff before
+      early afternoon. Hit <b>Refresh</b> to re-rank as the forecast firms up.
+    </div>`;
 }
 
 function renderMeta() {
@@ -587,6 +793,7 @@ function detailHTML(loc, i) {
       <span>☾ set <b>${hhmm(sunset)}</b></span>
       <span>16-day outlook</span>
     </div>
+    ${LOCATIONS[i].coast !== "val" ? `<div class="tideline">${tideTextToday(loc, t)}</div>` : ""}
     ${nowStrip(loc)}
     ${wedPending}
     <div class="ribbon-legend">
@@ -597,10 +804,17 @@ function detailHTML(loc, i) {
       <span><i style="background:var(--rain)"></i>downpour</span>
       <span class="lg-night">faded = night</span>
     </div>
-    <div class="days">${daysHTML(loc, t)}</div>`;
+    <div class="days">${daysHTML(loc, t, LOCATIONS[i].coast)}</div>`;
 }
 
-function daysHTML(loc, todayStr) {
+function tideRow(loc, ymd) {
+  const ex = tideExtrema(loc, ymd);
+  if (!ex.length) return "";
+  const parts = ex.map(e => `<span class="${e.type === "H" ? "h" : "l"}">${e.type === "H" ? "▲" : "▼"} ${e.t}</span>`).join("");
+  return `<div class="d-tide"><span class="lbl">tide</span>${parts}</div>`;
+}
+
+function daysHTML(loc, todayStr, coast) {
   const D = loc.daily;
   const nowHr = loc.current ? hourOf(loc.current.time) : -1;
   let out = "";
@@ -621,6 +835,7 @@ function daysHTML(loc, todayStr) {
         </div>
         <div class="d-arc">${icon(code, 16)}<span class="arc-txt">${arc}${isWed ? ` · wedding` : ""}</span>${tag ? `<span class="rainflag sm ${tag.c}">${tag.t}</span>` : ""}</div>
         ${ribbon(loc, ymd, isToday ? nowHr : -1)}
+        ${coast !== "val" ? tideRow(loc, ymd) : ""}
       </div>`;
   }
   return out;
@@ -636,6 +851,7 @@ function daysHTML(loc, todayStr) {
     if (age > STALE_MS) setBanner("info", "Showing cached forecast while refreshing…");
   }
   document.getElementById("refreshBtn").addEventListener("click", refresh);
+  document.querySelectorAll("#tabs .tab").forEach(b => b.addEventListener("click", () => switchView(b.dataset.view)));
   refresh();
 })();
 </script>
