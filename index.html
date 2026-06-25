@@ -176,7 +176,7 @@
   footer a { color: var(--ink-faint); }
 
   /* tabs */
-  nav.tabs { display: flex; gap: 6px; margin-top: 14px; }
+  nav.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
   nav.tabs .tab {
     flex: 0 0 auto; background: transparent; color: var(--ink-dim);
     border: 1px solid var(--line); border-radius: 5px;
@@ -253,6 +253,27 @@
   .rk-region { display: block; font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); font-weight: 400; margin-top: 1px; }
   .rk-fig { font-family: var(--mono); font-size: 11px; color: var(--ink-dim); text-align: right; white-space: nowrap; }
   .rk-fig b { color: var(--ink); font-weight: 500; }
+
+  /* converters */
+  .conv-intro { margin: 16px 0 6px; font-size: 13px; color: var(--ink-dim); line-height: 1.55; }
+  .conv-intro b { color: var(--ink); font-weight: 600; }
+  .conv-sec { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin: 22px 0 2px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .conv-card { border: 1px solid var(--line); border-left: 3px solid var(--pacific); border-radius: 7px; background: var(--panel); padding: 14px 15px; margin-top: 10px; }
+  .conv-card.temp { border-left-color: var(--caribbean); }
+  .conv-row { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+  .conv-row:first-of-type { margin-top: 0; }
+  .conv-row label { flex: 0 0 92px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-dim); }
+  .conv-input {
+    flex: 1 1 auto; min-width: 0;
+    background: var(--panel-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 5px;
+    font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+    font-size: 15px; padding: 9px 11px; text-align: right;
+    -webkit-appearance: none; appearance: none;
+  }
+  .conv-input:focus { outline: none; border-color: var(--ink-faint); background: var(--bg); }
+  .conv-note { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-top: 12px; letter-spacing: 0.02em; line-height: 1.5; }
+  .conv-note.err { color: var(--rain); }
 </style>
 </head>
 <body>
@@ -272,6 +293,7 @@
     <button class="tab active" data-view="forecast">Forecast</button>
     <button class="tab" data-view="trip">Trip</button>
     <button class="tab" data-view="activities">Mal País</button>
+    <button class="tab" data-view="tools">Converter</button>
   </nav>
 
   <div id="view-forecast">
@@ -286,6 +308,25 @@
 
   <div id="view-activities" hidden>
     <div id="activities"></div>
+  </div>
+
+  <div id="view-tools" hidden>
+    <div class="conv-intro">Trip-side reference — <b>type in any field</b> and the others convert instantly.</div>
+
+    <div class="conv-sec">Currency · NOK · USD · Colón</div>
+    <div class="conv-card">
+      <div class="conv-row"><label>NOK · kr</label><input class="conv-input" id="cur-nok" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" /></div>
+      <div class="conv-row"><label>USD · $</label><input class="conv-input" id="cur-usd" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" /></div>
+      <div class="conv-row"><label>CRC · ₡</label><input class="conv-input" id="cur-crc" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" /></div>
+      <div class="conv-note" id="cur-note">Loading live rates…</div>
+    </div>
+
+    <div class="conv-sec">Temperature</div>
+    <div class="conv-card temp">
+      <div class="conv-row"><label>Celsius · °C</label><input class="conv-input" id="temp-c" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" /></div>
+      <div class="conv-row"><label>Fahrenheit · °F</label><input class="conv-input" id="temp-f" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" /></div>
+      <div class="conv-note">°F = °C × 9⁄5 + 32 · body-temp check: 37 °C = 98.6 °F</div>
+    </div>
   </div>
 
   <footer>
@@ -652,12 +693,78 @@ function render() {
 }
 
 /* ---------- tabs ---------- */
-const VIEWS = ["forecast", "trip", "activities"];
+const VIEWS = ["forecast", "trip", "activities", "tools"];
 function switchView(view) {
   document.querySelectorAll("#tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.view === view));
   VIEWS.forEach(v => { const el = document.getElementById("view-" + v); if (el) el.hidden = v !== view; });
   if (view === "activities") renderActivities();
   if (view === "trip") renderTrip();
+}
+
+/* ---------- converters ---------- */
+// rates expressed as units per 1 USD; live-refreshed, with offline fallback
+const FX = { USD: 1, NOK: 10.6, CRC: 510 };
+const CUR_KEYS = { nok: "NOK", usd: "USD", crc: "CRC" };
+
+function parseNum(s) {
+  if (s == null) return null;
+  const t = String(s).trim().replace(/\s/g, "").replace(",", ".");
+  if (t === "" || t === "-" || t === "." || t === "-.") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+function fmtMoney(v, cur) {
+  const dec = cur === "CRC" ? 0 : 2;
+  return v.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function fmtRate(v) { return v.toLocaleString("en-US", { maximumFractionDigits: 2 }); }
+function fmtTemp(v) { return (Math.round(v * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 }); }
+
+function recalcCurrency(src) {
+  const raw = parseNum(document.getElementById("cur-" + src).value);
+  Object.keys(CUR_KEYS).forEach(k => {
+    if (k === src) return;
+    const el = document.getElementById("cur-" + k);
+    if (raw === null) { el.value = ""; return; }
+    const usd = raw / FX[CUR_KEYS[src]];
+    el.value = fmtMoney(usd * FX[CUR_KEYS[k]], CUR_KEYS[k]);
+  });
+}
+function recalcTemp(src) {
+  const c = document.getElementById("temp-c"), f = document.getElementById("temp-f");
+  if (src === "c") { const v = parseNum(c.value); f.value = v === null ? "" : fmtTemp(v * 9 / 5 + 32); }
+  else            { const v = parseNum(f.value); c.value = v === null ? "" : fmtTemp((v - 32) * 5 / 9); }
+}
+function setCurNote(msg, isErr) {
+  const el = document.getElementById("cur-note");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle("err", !!isErr);
+}
+async function loadRates() {
+  try {
+    const r = await fetch("https://open.er-api.com/v6/latest/USD");
+    if (!r.ok) throw new Error("http " + r.status);
+    const j = await r.json();
+    if (!j.rates || !j.rates.NOK || !j.rates.CRC) throw new Error("missing rates");
+    FX.USD = 1; FX.NOK = j.rates.NOK; FX.CRC = j.rates.CRC;
+    const stamp = j.time_last_update_utc ? j.time_last_update_utc.replace(/ \+0000.*/, "").replace(/^\w+, /, "") : "";
+    setCurNote("Live · 1 USD = " + fmtRate(FX.NOK) + " kr · " + fmtRate(FX.CRC) + " ₡" + (stamp ? " · " + stamp : ""));
+  } catch (e) {
+    setCurNote("Offline rates (approx) · 1 USD ≈ " + fmtRate(FX.NOK) + " kr · " + fmtRate(FX.CRC) + " ₡", true);
+  }
+  recalcCurrency("nok");
+}
+function setupConverters() {
+  const bind = (id, fn, key) => { const el = document.getElementById(id); if (el) el.addEventListener("input", () => fn(key)); };
+  bind("cur-nok", recalcCurrency, "nok");
+  bind("cur-usd", recalcCurrency, "usd");
+  bind("cur-crc", recalcCurrency, "crc");
+  bind("temp-c", recalcTemp, "c");
+  bind("temp-f", recalcTemp, "f");
+  const nok = document.getElementById("cur-nok"); if (nok) nok.value = "100";
+  const c = document.getElementById("temp-c"); if (c) { c.value = "25"; recalcTemp("c"); }
+  loadRates();
 }
 
 /* ---------- trip view ---------- */
@@ -1019,6 +1126,7 @@ function daysHTML(loc, todayStr, coast) {
   }
   document.getElementById("refreshBtn").addEventListener("click", refresh);
   document.querySelectorAll("#tabs .tab").forEach(b => b.addEventListener("click", () => switchView(b.dataset.view)));
+  setupConverters();
   refresh();
 })();
 </script>
