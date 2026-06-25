@@ -629,7 +629,12 @@ function loadCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw);
+    const c = JSON.parse(raw);
+    // discard a cache whose shape no longer matches LOCATIONS (e.g. a location
+    // was added/removed) — data is indexed positionally, so a length mismatch
+    // would make render() dereference a missing entry and stall on load.
+    if (!c || !Array.isArray(c.data) || c.data.length !== LOCATIONS.length) return null;
+    return c;
   } catch (e) { return null; }
 }
 function saveCache(data, ts) {
